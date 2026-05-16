@@ -24,9 +24,17 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Daftarkan routes di sini nanti, contoh:
-// const authRoutes = require('./routes/auth');
-// app.use('/api/v1/auth', authRoutes);
+const authRoutes = require('./routes/auth');
+const warehouseRoutes = require('./routes/warehouse');
+const assetRoutes = require('./routes/asset');
+const supplierRoutes = require('./routes/supplier');
+const storageBinRoutes = require('./routes/storageBin');
+
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/warehouses', warehouseRoutes);
+app.use('/api/v1/assets', assetRoutes);
+app.use('/api/v1/suppliers', supplierRoutes);
+app.use('/api/v1/storage-bins', storageBinRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

@@ -12,15 +12,88 @@ enum Role {
   STAFF
 }
 
+enum AssetCategory {
+  SMALL_ASSET
+  MEDIUM_ASSET
+  LARGE_ASSET
+}
+
+enum SupplierCategory {
+  LOCAL
+  IMPORT
+}
+
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(STAFF)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  userNumber String   @unique
+  userName   String
+  email      String   @unique
+  telp       String?
+  password   String
+  role       Role     @default(STAFF)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("users")
+}
+
+model Warehouse {
+  id          String       @id @default(cuid())
+  whNumber    String       @unique
+  whName      String
+  whLocation  String?
+  remarks     String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  storageBins StorageBin[]
+
+  @@map("warehouses")
+}
+
+model StorageBin {
+  id          String        @id @default(cuid())
+  binAddress  String        @unique
+  category    AssetCategory
+  remarks     String?
+  warehouseId String
+  warehouse   Warehouse     @relation(fields: [warehouseId], references: [id])
+  asset       Asset?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("storage_bins")
+}
+
+model Supplier {
+  id          String           @id @default(cuid())
+  supNumber   String           @unique
+  supName     String
+  supCategory SupplierCategory @default(LOCAL)
+  address     String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  assets      Asset[]
+
+  @@map("suppliers")
+}
+
+model Asset {
+  id           String        @id @default(cuid())
+  assetNumber  String        @unique
+  assetName    String
+  category     AssetCategory
+  price        Decimal       @default(0)
+  remarks      String?
+  supplierId   String?
+  supplier     Supplier?     @relation(fields: [supplierId], references: [id])
+  storageBinId String?       @unique
+  storageBin   StorageBin?   @relation(fields: [storageBinId], references: [id])
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("assets")
 }
