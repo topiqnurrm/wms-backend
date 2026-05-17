@@ -29,12 +29,14 @@ const warehouseRoutes = require('./routes/warehouse');
 const assetRoutes = require('./routes/asset');
 const supplierRoutes = require('./routes/supplier');
 const storageBinRoutes = require('./routes/storageBin');
+const assetMovementRoutes = require('./routes/assetMovement');
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/warehouses', warehouseRoutes);
 app.use('/api/v1/assets', assetRoutes);
 app.use('/api/v1/suppliers', supplierRoutes);
 app.use('/api/v1/storage-bins', storageBinRoutes);
+app.use('/api/v1/asset-movements', assetMovementRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
