@@ -79,4 +79,108 @@ const me = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, me };
+const getAll = async (req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return successResponse(res, users, 'Users fetched successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        id,
+        isActive: true,
+      },
+    });
+
+    if (!user) throw createError('User not found', 404);
+
+    const { password: _, ...userWithoutPassword } = user;
+
+    return successResponse(res, userWithoutPassword, 'User fetched successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+const update = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { userName, email, telp, role } = req.body;
+
+    const existing = await prisma.user.findFirst({
+      where: {
+        id,
+        isActive: true,
+      },
+    });
+
+    if (!existing) throw createError('User not found', 404);
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(userName && { userName }),
+        ...(email && { email }),
+        ...(telp !== undefined && { telp }),
+        ...(role && { role }),
+      },
+    });
+
+    const { password: _, ...userWithoutPassword } = user;
+
+    return successResponse(res, userWithoutPassword, 'User updated successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+const remove = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await prisma.user.findFirst({
+      where: {
+        id,
+        isActive: true,
+      },
+    });
+
+    if (!existing) throw createError('User not found', 404);
+
+    await prisma.user.update({
+      where: { id },
+      data: {
+        isActive: false,
+      },
+    });
+
+    return successResponse(res, null, 'User deleted successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  me,
+  getAll,
+  getById,
+  update,
+  remove,
+};
