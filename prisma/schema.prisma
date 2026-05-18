@@ -48,6 +48,7 @@ model Warehouse {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   storageBins StorageBin[]
+  movements AssetMovement[]
 
   @@map("warehouses")
 }
@@ -62,6 +63,7 @@ model StorageBin {
   asset       Asset?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  movements AssetMovement[]
 
   @@map("storage_bins")
 }
@@ -86,6 +88,7 @@ model Asset {
   assetName    String
   category     AssetCategory
   price        Decimal       @default(0)
+  quantity     Int           @default(0)
   remarks      String?
   supplierId   String?
   supplier     Supplier?     @relation(fields: [supplierId], references: [id])
@@ -94,6 +97,33 @@ model Asset {
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+  movements AssetMovement[]
 
   @@map("assets")
+}
+
+enum MovementType {
+  INBOUND
+  OUTBOUND
+  TRANSFER
+}
+
+model AssetMovement {
+  id            String         @id @default(cuid())
+
+  assetId       String
+  warehouseId   String
+  storageBinId  String?
+
+  type          MovementType
+  quantity      Int
+  notes         String?
+
+  createdAt     DateTime       @default(now())
+
+  asset         Asset          @relation(fields: [assetId], references: [id])
+  warehouse     Warehouse      @relation(fields: [warehouseId], references: [id])
+  storageBin    StorageBin?    @relation(fields: [storageBinId], references: [id])
+
+  @@map("asset_movements")
 }
