@@ -59,7 +59,7 @@ const warehouseRoutes = require('./routes/warehouse');
 const assetRoutes = require('./routes/asset');
 const supplierRoutes = require('./routes/supplier');
 const storageBinRoutes = require('./routes/storageBin');
-// const assetMovementRoutes = require('./routes/assetMovement');
+const assetMovementRoutes = require('./routes/assetMovement');
 
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/users', userRoutes);
@@ -67,7 +67,7 @@ app.use('/api/v1/warehouses', warehouseRoutes);
 app.use('/api/v1/assets', assetRoutes);
 app.use('/api/v1/suppliers', supplierRoutes);
 app.use('/api/v1/storage-bins', storageBinRoutes);
-// app.use('/api/v1/asset-movements', assetMovementRoutes);
+app.use('/api/v1/asset-movements', assetMovementRoutes);
 
 // 404 handler
 app.use((req, res) => {
