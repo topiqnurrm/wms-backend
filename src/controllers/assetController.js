@@ -56,12 +56,13 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { assetName, category, price,quantity, remarks, supplierId, storageBinId } = req.body;
+    const { assetName, category, price, remarks, supplierId } = req.body;
+    // const { assetName, category, price,quantity, remarks, supplierId, storageBinId } = req.body;
 
     if (!assetName) throw createError('Asset name is required', 400);
     if (!category) throw createError('Category is required', 400);
     if (!price) throw createError('Price is required', 400);
-    if (quantity === undefined) throw createError('Quantity is required', 400);
+    // if (quantity === undefined) throw createError('Quantity is required', 400);
 
     const validCategories = ['SMALL_ASSET', 'MEDIUM_ASSET', 'LARGE_ASSET'];
     if (!validCategories.includes(category)) {
@@ -81,15 +82,16 @@ const create = async (req, res, next) => {
         assetName,
         category,
         price,
-        quantity,
+        // quantity,
         remarks,
         supplierId: supplierId || null,
-        storageBinId: storageBinId || null,
+        // storageBinId: storageBinId || null,
       },
-      include: { supplier: true,
-        storageBin: { 
-          include: { warehouse: true } }
-       },
+      include: { supplier: true },
+      // include: { supplier: true,
+      //   storageBin: { 
+      //     include: { warehouse: true } }
+      //  },
     });
 
     return successResponse(res, data, 'Asset created successfully', 201);

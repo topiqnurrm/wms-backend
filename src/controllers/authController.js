@@ -79,108 +79,110 @@ const me = async (req, res, next) => {
   }
 };
 
-const getAll = async (req, res, next) => {
-  try {
-    const users = await prisma.user.findMany({
-      where: {
-        isActive: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+module.exports = { register, login, me };
 
-    return successResponse(res, users, 'Users fetched successfully');
-  } catch (error) {
-    next(error);
-  }
-};
+// const getAll = async (req, res, next) => {
+//   try {
+//     const users = await prisma.user.findMany({
+//       where: {
+//         isActive: true,
+//       },
+//       orderBy: {
+//         createdAt: 'desc',
+//       },
+//     });
 
-const getById = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+//     return successResponse(res, users, 'Users fetched successfully');
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
-    const user = await prisma.user.findFirst({
-      where: {
-        id,
-        isActive: true,
-      },
-    });
+// const getById = async (req, res, next) => {
+//   try {
+//     const { id } = req.params;
 
-    if (!user) throw createError('User not found', 404);
+//     const user = await prisma.user.findFirst({
+//       where: {
+//         id,
+//         isActive: true,
+//       },
+//     });
 
-    const { password: _, ...userWithoutPassword } = user;
+//     if (!user) throw createError('User not found', 404);
 
-    return successResponse(res, userWithoutPassword, 'User fetched successfully');
-  } catch (error) {
-    next(error);
-  }
-};
+//     const { password: _, ...userWithoutPassword } = user;
 
-const update = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { userName, email, telp, role } = req.body;
+//     return successResponse(res, userWithoutPassword, 'User fetched successfully');
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
-    const existing = await prisma.user.findFirst({
-      where: {
-        id,
-        isActive: true,
-      },
-    });
+// const update = async (req, res, next) => {
+//   try {
+//     const { id } = req.params;
+//     const { userName, email, telp, role } = req.body;
 
-    if (!existing) throw createError('User not found', 404);
+//     const existing = await prisma.user.findFirst({
+//       where: {
+//         id,
+//         isActive: true,
+//       },
+//     });
 
-    const user = await prisma.user.update({
-      where: { id },
-      data: {
-        ...(userName && { userName }),
-        ...(email && { email }),
-        ...(telp !== undefined && { telp }),
-        ...(role && { role }),
-      },
-    });
+//     if (!existing) throw createError('User not found', 404);
 
-    const { password: _, ...userWithoutPassword } = user;
+//     const user = await prisma.user.update({
+//       where: { id },
+//       data: {
+//         ...(userName && { userName }),
+//         ...(email && { email }),
+//         ...(telp !== undefined && { telp }),
+//         ...(role && { role }),
+//       },
+//     });
 
-    return successResponse(res, userWithoutPassword, 'User updated successfully');
-  } catch (error) {
-    next(error);
-  }
-};
+//     const { password: _, ...userWithoutPassword } = user;
 
-const remove = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+//     return successResponse(res, userWithoutPassword, 'User updated successfully');
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
-    const existing = await prisma.user.findFirst({
-      where: {
-        id,
-        isActive: true,
-      },
-    });
+// const remove = async (req, res, next) => {
+//   try {
+//     const { id } = req.params;
 
-    if (!existing) throw createError('User not found', 404);
+//     const existing = await prisma.user.findFirst({
+//       where: {
+//         id,
+//         isActive: true,
+//       },
+//     });
 
-    await prisma.user.update({
-      where: { id },
-      data: {
-        isActive: false,
-      },
-    });
+//     if (!existing) throw createError('User not found', 404);
 
-    return successResponse(res, null, 'User deleted successfully');
-  } catch (error) {
-    next(error);
-  }
-};
+//     await prisma.user.update({
+//       where: { id },
+//       data: {
+//         isActive: false,
+//       },
+//     });
 
-module.exports = {
-  register,
-  login,
-  me,
-  getAll,
-  getById,
-  update,
-  remove,
-};
+//     return successResponse(res, null, 'User deleted successfully');
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+// module.exports = {
+//   register,
+//   login,
+//   me,
+//   getAll,
+//   getById,
+//   update,
+//   remove,
+// };

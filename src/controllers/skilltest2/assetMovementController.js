@@ -1,4 +1,4 @@
-const prisma = require('../utils/prisma');
+const prisma = require('../../utils/prisma');
 
 // get all movements
 const getAll = async (req, res) => {

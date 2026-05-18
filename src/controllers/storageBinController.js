@@ -11,6 +11,7 @@ const getAll = async (req, res, next) => {
       ...(warehouseId && { warehouseId }),
       OR: [
         { binAddress: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
       ],
     };
 
