@@ -7,11 +7,16 @@ const getAll = async (req, res, next) => {
     const { page = 1, limit = 10, search = '', warehouseId } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    const validCategories = ['SMALL_ASSET', 'MEDIUM_ASSET', 'LARGE_ASSET'];
+    const matchedCategory = search
+      ? validCategories.find(c => c.toLowerCase().includes(search.toLowerCase()))
+      : null;
+
     const where = {
       ...(warehouseId && { warehouseId }),
       OR: [
         { binAddress: { contains: search, mode: 'insensitive' } },
-        { category: { contains: search, mode: 'insensitive' } },
+        ...(matchedCategory ? [{ category: matchedCategory }] : []),
       ],
     };
 
@@ -156,7 +161,7 @@ const remove = async (req, res, next) => {
 
     const existing = await prisma.storageBin.findFirst({
       where: { id },
-      include: { asset: true }, // ← FIX: tambah include asset
+      include: { asset: true },
     });
     if (!existing) throw createError('Storage bin not found', 404);
 

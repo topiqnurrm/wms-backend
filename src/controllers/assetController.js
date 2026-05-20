@@ -7,9 +7,13 @@ const getAll = async (req, res, next) => {
     const { page = 1, limit = 10, search = '', category } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    // Validasi category enum sebelum masuk ke query
+    const validCategories = ['SMALL_ASSET', 'MEDIUM_ASSET', 'LARGE_ASSET'];
+    const categoryFilter = category && validCategories.includes(category) ? category : undefined;
+
     const where = {
       isActive: true,
-      ...(category && { category }),
+      ...(categoryFilter && { category: categoryFilter }),
       OR: [
         { assetName: { contains: search, mode: 'insensitive' } },
         { assetNumber: { contains: search, mode: 'insensitive' } },
