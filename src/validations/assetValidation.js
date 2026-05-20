@@ -23,6 +23,9 @@ const createAssetSchema = Joi.object({
   supplierId: Joi.string().optional().allow('', null).messages({
     'string.base': 'Supplier ID must be a string',
   }),
+  storageBinId: Joi.string().optional().allow('', null).messages({
+    'string.base': 'Storage Bin ID must be a string',
+  }),
 });
 
 const updateAssetSchema = Joi.object({
@@ -44,6 +47,9 @@ const updateAssetSchema = Joi.object({
   }),
   supplierId: Joi.string().optional().allow('', null).messages({
     'string.base': 'Supplier ID must be a string',
+  }),
+  storageBinId: Joi.string().optional().allow('', null).messages({
+    'string.base': 'Storage Bin ID must be a string',
   }),
 });
 

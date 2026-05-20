@@ -12,9 +12,6 @@ const createStorageBinSchema = Joi.object({
       'any.only': 'Category must be SMALL_ASSET, MEDIUM_ASSET, or LARGE_ASSET',
       'any.required': 'Category is required',
     }),
-  assetId: Joi.string().optional().allow('', null).messages({
-    'string.base': 'Asset ID must be a string',
-  }),
   remarks: Joi.string().max(500).optional().allow('', null).messages({
     'string.max': 'Remarks must be at most 500 characters',
   }),
@@ -27,9 +24,6 @@ const updateStorageBinSchema = Joi.object({
     .messages({
       'any.only': 'Category must be SMALL_ASSET, MEDIUM_ASSET, or LARGE_ASSET',
     }),
-  assetId: Joi.string().optional().allow('', null).messages({
-    'string.base': 'Asset ID must be a string',
-  }),
   remarks: Joi.string().max(500).optional().allow('', null).messages({
     'string.max': 'Remarks must be at most 500 characters',
   }),

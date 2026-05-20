@@ -8,10 +8,9 @@ const createSupplierSchema = Joi.object({
   }),
   supCategory: Joi.string()
     .valid('LOCAL', 'IMPORT')
-    .required()
+    .optional()
     .messages({
       'any.only': 'Category must be LOCAL or IMPORT',
-      'any.required': 'Supplier category is required',
     }),
   address: Joi.string().max(255).optional().allow('', null).messages({
     'string.max': 'Address must be at most 255 characters',
