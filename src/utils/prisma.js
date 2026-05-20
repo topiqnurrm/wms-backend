@@ -15,7 +15,14 @@ const getPrisma = () => {
 
 const prismaProxy = new Proxy({}, {
   get(_, prop) {
-    return getPrisma()[prop];
+    const client = getPrisma();
+    const value = client[prop];
+    // Bind method agar `this` tetap mengarah ke PrismaClient asli
+    // Tanpa ini, $connect/$disconnect/$transaction bisa error
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    return value;
   }
 });
 

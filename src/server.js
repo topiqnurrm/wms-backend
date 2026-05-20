@@ -1,15 +1,8 @@
+// src/server.js — versi bersih untuk deploy
 require('dotenv').config();
 
 const app = require('./app');
-const { PrismaClient } = require('@prisma/client');
-const { PrismaNeon } = require('@prisma/adapter-neon');
-const { neonConfig, Pool } = require('@neondatabase/serverless');
-
-neonConfig.webSocketConstructor = require('ws');
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaNeon(pool);
-const prisma = new PrismaClient({ adapter });
+const prisma = require('./utils/prisma'); // pakai yang sudah ada, adapter pg
 
 const PORT = process.env.PORT || 3000;
 
@@ -19,7 +12,7 @@ async function startServer() {
     console.log('✅ Database connected');
 
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 
