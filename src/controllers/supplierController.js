@@ -52,17 +52,24 @@ const create = async (req, res, next) => {
     const { supName, supCategory, address } = req.body;
 
     if (!supName) throw createError('Supplier name is required', 400);
-    if (!supCategory) throw createError('Supplier category is required', 400);
 
-    const validCategories = ['LOCAL', 'IMPORT'];
-    if (!validCategories.includes(supCategory)) {
-      throw createError('Category must be LOCAL or IMPORT', 400);
+    // FIX: supCategory optional, default ke LOCAL jika tidak diisi
+    if (supCategory) {
+      const validCategories = ['LOCAL', 'IMPORT'];
+      if (!validCategories.includes(supCategory)) {
+        throw createError('Category must be LOCAL or IMPORT', 400);
+      }
     }
 
     const supNumber = await generateSupplierNumber();
 
     const data = await prisma.supplier.create({
-      data: { supNumber, supName, supCategory, address },
+      data: {
+        supNumber,
+        supName,
+        supCategory: supCategory || 'LOCAL',
+        address,
+      },
     });
 
     return successResponse(res, data, 'Supplier created successfully', 201);

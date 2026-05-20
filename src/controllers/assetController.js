@@ -103,7 +103,7 @@ const create = async (req, res, next) => {
 const update = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { assetName, category, price, remarks, supplierId } = req.body;
+    const { assetName, category, price, remarks, supplierId, storageBinId } = req.body; // ← tambah storageBinId
 
     const existing = await prisma.asset.findFirst({ where: { id, isActive: true } });
     if (!existing) throw createError('Asset not found', 404);
@@ -120,6 +120,23 @@ const update = async (req, res, next) => {
       if (!supplier) throw createError('Supplier not found', 404);
     }
 
+    // Validasi storageBinId jika dikirim
+    if (storageBinId) {
+      const bin = await prisma.storageBin.findFirst({ where: { id: storageBinId } });
+      if (!bin) throw createError('Storage bin not found', 404);
+
+      // Cek category harus sama
+      if (bin.category !== (category || existing.category)) {
+        throw createError('Asset category must match storage bin category', 400);
+      }
+
+      // Cek storage bin belum dipakai asset lain
+      const occupied = await prisma.asset.findFirst({
+        where: { storageBinId, isActive: true, id: { not: id } },
+      });
+      if (occupied) throw createError('Storage bin already occupied by another asset', 409);
+    }
+
     const data = await prisma.asset.update({
       where: { id },
       data: {
@@ -128,8 +145,12 @@ const update = async (req, res, next) => {
         ...(price && { price }),
         ...(remarks !== undefined && { remarks }),
         ...(supplierId !== undefined && { supplierId }),
+        ...(storageBinId !== undefined && { storageBinId }), // ← tambah ini
       },
-      include: { supplier: true },
+      include: {
+        supplier: true,
+        storageBin: { include: { warehouse: true } },
+      },
     });
 
     return successResponse(res, data, 'Asset updated successfully');

@@ -154,7 +154,10 @@ const remove = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const existing = await prisma.storageBin.findFirst({ where: { id } });
+    const existing = await prisma.storageBin.findFirst({
+      where: { id },
+      include: { asset: true }, // ← FIX: tambah include asset
+    });
     if (!existing) throw createError('Storage bin not found', 404);
 
     if (existing.asset) {
