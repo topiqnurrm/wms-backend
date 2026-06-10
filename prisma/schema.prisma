@@ -6,23 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  ADMIN
-  MANAGER
-  STAFF
-}
-
-enum AssetCategory {
-  SMALL_ASSET
-  MEDIUM_ASSET
-  LARGE_ASSET
-}
-
-enum SupplierCategory {
-  LOCAL
-  IMPORT
-}
-
 model User {
   id         String   @id @default(cuid())
   userNumber String   @unique
@@ -34,6 +17,9 @@ model User {
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  workOrders WorkOrder[]
+  scans      LabelScan[] // TAMBAHKAN INI
 
   @@map("users")
 }
@@ -48,7 +34,7 @@ model Warehouse {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   storageBins StorageBin[]
-  movements AssetMovement[]
+  workOrders  WorkOrder[]
 
   @@map("warehouses")
 }
@@ -59,11 +45,11 @@ model StorageBin {
   category    AssetCategory
   remarks     String?
   warehouseId String
-  warehouse   Warehouse     @relation(fields: [warehouseId], references: [id])
-  asset       Asset?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
-  movements AssetMovement[]
+  asset       Asset?
+  warehouse   Warehouse     @relation(fields: [warehouseId], references: [id])
+  workOrders  WorkOrder[]
 
   @@map("storage_bins")
 }
@@ -88,42 +74,101 @@ model Asset {
   assetName    String
   category     AssetCategory
   price        Decimal       @default(0)
-  quantity     Int           @default(0)
   remarks      String?
   supplierId   String?
-  supplier     Supplier?     @relation(fields: [supplierId], references: [id])
   storageBinId String?       @unique
-  storageBin   StorageBin?   @relation(fields: [storageBinId], references: [id])
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
-  movements AssetMovement[]
+  quantity     Int           @default(0)
+  labels       AssetLabel[]
+  storageBin   StorageBin?   @relation(fields: [storageBinId], references: [id])
+  supplier     Supplier?     @relation(fields: [supplierId], references: [id])
+  workOrders   WorkOrder[]
 
   @@map("assets")
 }
 
-enum MovementType {
-  INBOUND
-  OUTBOUND
-  TRANSFER
+model WorkOrder {
+  id           String          @id @default(cuid())
+  woNumber     String          @unique
+  type         WorkOrderType
+  status       WorkOrderStatus @default(TODO)
+  warehouseId  String
+  storageBinId String
+  assetId      String
+  quantity     Int
+  remarks      String?
+  createdById  String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  labels       AssetLabel[]
+  labelScans   LabelScan[]
+  asset        Asset           @relation(fields: [assetId], references: [id])
+  createdBy    User            @relation(fields: [createdById], references: [id])
+  storageBin   StorageBin      @relation(fields: [storageBinId], references: [id])
+  warehouse    Warehouse       @relation(fields: [warehouseId], references: [id])
+
+  @@map("work_orders")
 }
 
-model AssetMovement {
-  id            String         @id @default(cuid())
+model AssetLabel {
+  id          String      @id @default(cuid())
+  labelCode   String      @unique
+  assetId     String
+  workOrderId String
+  inboundAt   DateTime?
+  outboundAt  DateTime?
+  isOutbound  Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  asset       Asset       @relation(fields: [assetId], references: [id])
+  workOrder   WorkOrder   @relation(fields: [workOrderId], references: [id])
+  scans       LabelScan[]
 
-  assetId       String
-  warehouseId   String
-  storageBinId  String?
+  @@map("asset_labels")
+}
 
-  type          MovementType
-  quantity      Int
-  notes         String?
+model LabelScan {
+  id String @id @default(cuid())
 
-  createdAt     DateTime       @default(now())
+  labelId String
+  label   AssetLabel @relation(fields: [labelId], references: [id])
 
-  asset         Asset          @relation(fields: [assetId], references: [id])
-  warehouse     Warehouse      @relation(fields: [warehouseId], references: [id])
-  storageBin    StorageBin?    @relation(fields: [storageBinId], references: [id])
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
 
-  @@map("asset_movements")
+  scannedById String
+  scannedBy   User   @relation(fields: [scannedById], references: [id])
+
+  scannedAt DateTime @default(now())
+
+  @@map("label_scans")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum AssetCategory {
+  SMALL_ASSET
+  MEDIUM_ASSET
+  LARGE_ASSET
+}
+
+enum SupplierCategory {
+  LOCAL
+  IMPORT
+}
+
+enum WorkOrderType {
+  INBOUND
+  OUTBOUND
+}
+
+enum WorkOrderStatus {
+  TODO
+  ON_PROGRESS
+  DONE
 }

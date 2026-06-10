@@ -35,13 +35,61 @@ const generateSupplierNumber = async () => {
   return `SUP_${String(num).padStart(2, '0')}`;
 };
 
+const generateWONumber = async (type) => {
+  const prefix = type === 'INBOUND' ? 'WOI' : 'WOO';
+
+  const last = await prisma.workOrder.findFirst({
+    where: { type },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!last) {
+    return `${prefix}_001`;
+  }
+
+  const num = parseInt(last.woNumber.split('_')[1]) + 1;
+
+  return `${prefix}_${String(num).padStart(3, '0')}`;
+};
+
 const generateUserNumber = async () => {
   const last = await prisma.user.findFirst({
     orderBy: { userNumber: 'desc' },
   });
+
   if (!last) return 'USER_01';
+
   const num = parseInt(last.userNumber.split('_')[1]) + 1;
+
   return `USER_${String(num).padStart(2, '0')}`;
+};
+
+const generateLabelCode = async (assetNumber) => {
+  const lastLabel = await prisma.assetLabel.findFirst({
+    where: {
+      asset: {
+        assetNumber,
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    include: {
+      asset: true,
+    },
+  });
+
+  if (!lastLabel) {
+    return `${assetNumber}_000001`;
+  }
+
+  const lastNumber = parseInt(
+    lastLabel.labelCode.split('_').pop()
+  );
+
+  return `${assetNumber}_${String(
+    lastNumber + 1
+  ).padStart(6, '0')}`;
 };
 
 module.exports = {
@@ -50,4 +98,6 @@ module.exports = {
   generateAssetNumber,
   generateSupplierNumber,
   generateUserNumber,
+  generateWONumber,
+  generateLabelCode,
 };

@@ -60,22 +60,76 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { assetName, category, price, remarks, supplierId } = req.body;
-    // const { assetName, category, price,quantity, remarks, supplierId, storageBinId } = req.body;
+    const {
+      assetName,
+      category,
+      price,
+      remarks,
+      supplierId,
+      storageBinId,
+    } = req.body;
 
     if (!assetName) throw createError('Asset name is required', 400);
     if (!category) throw createError('Category is required', 400);
-    if (!price) throw createError('Price is required', 400);
-    // if (quantity === undefined) throw createError('Quantity is required', 400);
+    if (price === undefined) throw createError('Price is required', 400);
 
-    const validCategories = ['SMALL_ASSET', 'MEDIUM_ASSET', 'LARGE_ASSET'];
+    const validCategories = [
+      'SMALL_ASSET',
+      'MEDIUM_ASSET',
+      'LARGE_ASSET',
+    ];
+
     if (!validCategories.includes(category)) {
-      throw createError('Category must be SMALL_ASSET, MEDIUM_ASSET, or LARGE_ASSET', 400);
+      throw createError(
+        'Category must be SMALL_ASSET, MEDIUM_ASSET, or LARGE_ASSET',
+        400
+      );
     }
 
     if (supplierId) {
-      const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, isActive: true } });
-      if (!supplier) throw createError('Supplier not found', 404);
+      const supplier = await prisma.supplier.findFirst({
+        where: {
+          id: supplierId,
+          isActive: true,
+        },
+      });
+
+      if (!supplier) {
+        throw createError('Supplier not found', 404);
+      }
+    }
+
+    if (storageBinId) {
+      const bin = await prisma.storageBin.findFirst({
+        where: {
+          id: storageBinId,
+        },
+      });
+
+      if (!bin) {
+        throw createError('Storage bin not found', 404);
+      }
+
+      if (bin.category !== category) {
+        throw createError(
+          'Asset category must match storage bin category',
+          400
+        );
+      }
+
+      const occupied = await prisma.asset.findFirst({
+        where: {
+          storageBinId,
+          isActive: true,
+        },
+      });
+
+      if (occupied) {
+        throw createError(
+          'Storage bin already occupied by another asset',
+          409
+        );
+      }
     }
 
     const assetNumber = await generateAssetNumber();
@@ -86,19 +140,26 @@ const create = async (req, res, next) => {
         assetName,
         category,
         price,
-        // quantity,
         remarks,
         supplierId: supplierId || null,
-        // storageBinId: storageBinId || null,
+        storageBinId: storageBinId || null,
       },
-      include: { supplier: true },
-      // include: { supplier: true,
-      //   storageBin: { 
-      //     include: { warehouse: true } }
-      //  },
+      include: {
+        supplier: true,
+        storageBin: {
+          include: {
+            warehouse: true,
+          },
+        },
+      },
     });
 
-    return successResponse(res, data, 'Asset created successfully', 201);
+    return successResponse(
+      res,
+      data,
+      'Asset created successfully',
+      201
+    );
   } catch (error) {
     next(error);
   }
@@ -107,57 +168,117 @@ const create = async (req, res, next) => {
 const update = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { assetName, category, price, remarks, supplierId, storageBinId } = req.body; // ← tambah storageBinId
+    const {
+      assetName,
+      category,
+      price,
+      remarks,
+      supplierId,
+      storageBinId,
+    } = req.body;
 
-    const existing = await prisma.asset.findFirst({ where: { id, isActive: true } });
-    if (!existing) throw createError('Asset not found', 404);
+    const existing = await prisma.asset.findFirst({
+      where: {
+        id,
+        isActive: true,
+      },
+    });
+
+    if (!existing) {
+      throw createError('Asset not found', 404);
+    }
 
     if (category) {
-      const validCategories = ['SMALL_ASSET', 'MEDIUM_ASSET', 'LARGE_ASSET'];
+      const validCategories = [
+        'SMALL_ASSET',
+        'MEDIUM_ASSET',
+        'LARGE_ASSET',
+      ];
+
       if (!validCategories.includes(category)) {
-        throw createError('Category must be SMALL_ASSET, MEDIUM_ASSET, or LARGE_ASSET', 400);
+        throw createError(
+          'Category must be SMALL_ASSET, MEDIUM_ASSET, or LARGE_ASSET',
+          400
+        );
       }
     }
 
     if (supplierId) {
-      const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, isActive: true } });
-      if (!supplier) throw createError('Supplier not found', 404);
+      const supplier = await prisma.supplier.findFirst({
+        where: {
+          id: supplierId,
+          isActive: true,
+        },
+      });
+
+      if (!supplier) {
+        throw createError('Supplier not found', 404);
+      }
     }
 
-    // Validasi storageBinId jika dikirim
     if (storageBinId) {
-      const bin = await prisma.storageBin.findFirst({ where: { id: storageBinId } });
-      if (!bin) throw createError('Storage bin not found', 404);
+      const bin = await prisma.storageBin.findFirst({
+        where: {
+          id: storageBinId,
+        },
+      });
 
-      // Cek category harus sama
-      if (bin.category !== (category || existing.category)) {
-        throw createError('Asset category must match storage bin category', 400);
+      if (!bin) {
+        throw createError('Storage bin not found', 404);
       }
 
-      // Cek storage bin belum dipakai asset lain
+      if (bin.category !== (category || existing.category)) {
+        throw createError(
+          'Asset category must match storage bin category',
+          400
+        );
+      }
+
       const occupied = await prisma.asset.findFirst({
-        where: { storageBinId, isActive: true, id: { not: id } },
+        where: {
+          storageBinId,
+          isActive: true,
+          id: {
+            not: id,
+          },
+        },
       });
-      if (occupied) throw createError('Storage bin already occupied by another asset', 409);
+
+      if (occupied) {
+        throw createError(
+          'Storage bin already occupied by another asset',
+          409
+        );
+      }
     }
 
     const data = await prisma.asset.update({
-      where: { id },
+      where: {
+        id,
+      },
       data: {
         ...(assetName && { assetName }),
         ...(category && { category }),
-        ...(price && { price }),
+        ...(price !== undefined && { price }),
         ...(remarks !== undefined && { remarks }),
         ...(supplierId !== undefined && { supplierId }),
-        ...(storageBinId !== undefined && { storageBinId }), // ← tambah ini
+        ...(storageBinId !== undefined && { storageBinId }),
       },
       include: {
         supplier: true,
-        storageBin: { include: { warehouse: true } },
+        storageBin: {
+          include: {
+            warehouse: true,
+          },
+        },
       },
     });
 
-    return successResponse(res, data, 'Asset updated successfully');
+    return successResponse(
+      res,
+      data,
+      'Asset updated successfully'
+    );
   } catch (error) {
     next(error);
   }
