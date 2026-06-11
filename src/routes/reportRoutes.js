@@ -34,4 +34,11 @@ router.get(
   reportController.getAnalytics
 );
 
+router.get(
+  '/export/excel',
+  authenticate,
+  authorize('ADMIN', 'MANAGER', 'STAFF'),
+  reportController.exportExcel
+);
+
 module.exports = router;

@@ -175,9 +175,138 @@ const getAnalytics = async (req, res, next) => {
   }
 };
 
+
+const exportExcel = async (req, res, next) => {
+  try {
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+
+    // ===== SHEET 1: INBOUND =====
+    const inboundSheet = workbook.addWorksheet('Inbound Log');
+    inboundSheet.columns = [
+      { header: 'WO Number', key: 'woNumber', width: 15 },
+      { header: 'WO Category', key: 'woCategory', width: 15 },
+      { header: 'Warehouse', key: 'warehouseName', width: 20 },
+      { header: 'Storage Bin', key: 'storageBin', width: 15 },
+      { header: 'Asset Name', key: 'assetName', width: 30 },
+      { header: 'Supplier', key: 'supplierName', width: 20 },
+      { header: 'Remarks', key: 'remarks', width: 25 },
+      { header: 'Label Code', key: 'labelCode', width: 20 },
+      { header: 'Scanned At', key: 'scannedAt', width: 22 },
+      { header: 'Scanned By', key: 'scannedBy', width: 20 },
+      { header: 'Updated Stock', key: 'updatedStock', width: 15 },
+    ];
+    inboundSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    inboundSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+
+    const inboundScans = await prisma.labelScan.findMany({
+      include: {
+        label: { include: { asset: { include: { supplier: true, storageBin: true } }, workOrder: { include: { warehouse: true, storageBin: true } } } },
+        scannedBy: true,
+      },
+      orderBy: { scannedAt: 'desc' },
+    });
+
+    for (const scan of inboundScans) {
+      const stockAfter = await prisma.asset.findUnique({ where: { id: scan.label.assetId }, select: { quantity: true } });
+      inboundSheet.addRow({
+        woNumber: scan.label.workOrder.woNumber,
+        woCategory: scan.label.workOrder.type,
+        warehouseName: scan.label.workOrder.warehouse.whName,
+        storageBin: scan.label.workOrder.storageBin.binAddress,
+        assetName: scan.label.asset.assetName,
+        supplierName: scan.label.asset.supplier?.supName || '-',
+        remarks: scan.label.workOrder.remarks || '-',
+        labelCode: scan.label.labelCode,
+        scannedAt: new Date(scan.scannedAt).toLocaleString('id-ID'),
+        scannedBy: scan.scannedBy.userName,
+        updatedStock: stockAfter?.quantity ?? 0,
+      });
+    }
+
+    // ===== SHEET 2: OUTBOUND =====
+    const outboundSheet = workbook.addWorksheet('Outbound Log');
+    outboundSheet.columns = [
+      { header: 'WO Number', key: 'woNumber', width: 15 },
+      { header: 'WO Category', key: 'woCategory', width: 15 },
+      { header: 'Warehouse', key: 'warehouseName', width: 20 },
+      { header: 'Storage Bin', key: 'storageBin', width: 15 },
+      { header: 'Asset Name', key: 'assetName', width: 30 },
+      { header: 'Supplier', key: 'supplierName', width: 20 },
+      { header: 'Label Code', key: 'labelCode', width: 20 },
+      { header: 'Inbound At', key: 'inboundAt', width: 22 },
+      { header: 'Outbound At', key: 'outboundAt', width: 22 },
+    ];
+    outboundSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    outboundSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E8449' } };
+
+    const outboundLabels = await prisma.assetLabel.findMany({
+      where: { isOutbound: true },
+      include: { asset: { include: { supplier: true } }, workOrder: { include: { warehouse: true, storageBin: true } } },
+      orderBy: { outboundAt: 'desc' },
+    });
+
+    for (const label of outboundLabels) {
+      outboundSheet.addRow({
+        woNumber: label.workOrder.woNumber,
+        woCategory: label.workOrder.type,
+        warehouseName: label.workOrder.warehouse.whName,
+        storageBin: label.workOrder.storageBin.binAddress,
+        assetName: label.asset.assetName,
+        supplierName: label.asset.supplier?.supName || '-',
+        labelCode: label.labelCode,
+        inboundAt: label.inboundAt ? new Date(label.inboundAt).toLocaleString('id-ID') : '-',
+        outboundAt: label.outboundAt ? new Date(label.outboundAt).toLocaleString('id-ID') : '-',
+      });
+    }
+
+    // ===== SHEET 3: STOCK SUMMARY =====
+    const stockSheet = workbook.addWorksheet('Stock Summary');
+    stockSheet.columns = [
+      { header: 'Asset Number', key: 'assetNumber', width: 15 },
+      { header: 'Asset Name', key: 'assetName', width: 30 },
+      { header: 'Category', key: 'category', width: 15 },
+      { header: 'Storage Bin', key: 'storageBin', width: 15 },
+      { header: 'Warehouse', key: 'warehouseName', width: 20 },
+      { header: 'Supplier', key: 'supplierName', width: 20 },
+      { header: 'Stock', key: 'stock', width: 10 },
+      { header: 'Price', key: 'price', width: 15 },
+    ];
+    stockSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    stockSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E75B6' } };
+
+    const assets = await prisma.asset.findMany({
+      where: { isActive: true },
+      include: { supplier: true, storageBin: { include: { warehouse: true } } },
+      orderBy: { assetNumber: 'asc' },
+    });
+
+    for (const asset of assets) {
+      stockSheet.addRow({
+        assetNumber: asset.assetNumber,
+        assetName: asset.assetName,
+        category: asset.category,
+        storageBin: asset.storageBin?.binAddress || '-',
+        warehouseName: asset.storageBin?.warehouse?.whName || '-',
+        supplierName: asset.supplier?.supName || '-',
+        stock: asset.quantity,
+        price: 'Rp ' + Number(asset.price).toLocaleString('id-ID'),
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=WMS_Report_' + new Date().toISOString().split('T')[0] + '.xlsx');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getInboundReport,
   getOutboundReport,
   getStockReport,
   getAnalytics,
+  exportExcel,
 };
