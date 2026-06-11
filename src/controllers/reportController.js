@@ -47,12 +47,24 @@ const getInboundReport = async (req, res, next) => {
 
 const getOutboundReport = async (req, res, next) => {
   try {
-    const labels = await prisma.assetLabel.findMany({
-      where: { isOutbound: true },
-      orderBy: { outboundAt: 'desc' },
+    const scans = await prisma.labelScan.findMany({
+      where: {
+        workOrder: {
+          type: 'OUTBOUND',
+        },
+      },
+      orderBy: {
+        scannedAt: 'desc',
+      },
       include: {
-        asset: {
-          include: { supplier: true },
+        label: {
+          include: {
+            asset: {
+              include: {
+                supplier: true,
+              },
+            },
+          },
         },
         workOrder: {
           include: {
@@ -63,19 +75,24 @@ const getOutboundReport = async (req, res, next) => {
       },
     });
 
-    const data = labels.map((item) => ({
+    const data = scans.map((item) => ({
       woNumber: item.workOrder.woNumber,
       woCategory: item.workOrder.type,
       warehouseName: item.workOrder.warehouse.whName,
       storageBin: item.workOrder.storageBin.binAddress,
-      assetName: item.asset.assetName,
-      supplierName: item.asset.supplier?.supName || null,
+      assetName: item.label.asset.assetName,
+      supplierName:
+        item.label.asset.supplier?.supName || null,
       remarks: item.workOrder.remarks,
-      labelCode: item.labelCode,
-      outboundAt: item.outboundAt,
+      labelCode: item.label.labelCode,
+      outboundAt: item.scannedAt,
     }));
 
-    return successResponse(res, data, 'Outbound report fetched successfully');
+    return successResponse(
+      res,
+      data,
+      'Outbound report fetched successfully'
+    );
   } catch (error) {
     next(error);
   }

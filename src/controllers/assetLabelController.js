@@ -133,7 +133,19 @@ const scanLabel = async (req, res, next) => {
 
 const outboundScan = async (req, res, next) => {
   try {
-    const { labelCode } = req.body;
+    const { labelCode, workOrderId } = req.body;
+
+    const workOrder = await prisma.workOrder.findUnique({
+      where: { id: workOrderId },
+    });
+
+    if (!workOrder) {
+      throw createError('Work Order not found', 404);
+    }
+
+    if (workOrder.type !== 'OUTBOUND') {
+      throw createError('Work Order must be OUTBOUND', 400);
+    }
 
     const label = await prisma.assetLabel.findFirst({
       where: { labelCode },
@@ -147,13 +159,15 @@ const outboundScan = async (req, res, next) => {
       throw createError('Label already outbound', 400);
     }
 
-    // FIFO Check — harus scan label inbound terlama dulu
+    // FIFO Check
     const fifoLabel = await prisma.assetLabel.findFirst({
       where: {
         assetId: label.assetId,
         isOutbound: false,
       },
-      orderBy: { inboundAt: 'asc' },
+      orderBy: {
+        inboundAt: 'asc',
+      },
     });
 
     if (fifoLabel && fifoLabel.id !== label.id) {
@@ -163,22 +177,85 @@ const outboundScan = async (req, res, next) => {
       );
     }
 
-    // Update label jadi outbound
+    // Cek qty WO outbound
+    const scanCount = await prisma.labelScan.count({
+      where: {
+        workOrderId,
+      },
+    });
+
+    if (scanCount >= workOrder.quantity) {
+      throw createError('WO quantity reached', 400);
+    }
+
+    // Update label outbound
     const data = await prisma.assetLabel.update({
-      where: { id: label.id },
+      where: {
+        id: label.id,
+      },
       data: {
         isOutbound: true,
         outboundAt: new Date(),
       },
     });
 
-    // Kurangi stock asset
-    await prisma.asset.update({
-      where: { id: label.assetId },
-      data: { quantity: { decrement: 1 } },
+    // Simpan transaksi outbound
+    await prisma.labelScan.create({
+      data: {
+        labelId: label.id,
+        workOrderId,
+        scannedById: req.user.id,
+      },
     });
 
-    return successResponse(res, data, 'Outbound scan success');
+    // Kurangi stock
+    await prisma.asset.update({
+      where: {
+        id: label.assetId,
+      },
+      data: {
+        quantity: {
+          decrement: 1,
+        },
+      },
+    });
+
+    // Update status WO
+    const totalScan = await prisma.labelScan.count({
+      where: {
+        workOrderId,
+      },
+    });
+
+    let status = 'TODO';
+
+    if (totalScan > 0) {
+      status = 'ON_PROGRESS';
+    }
+
+    if (totalScan >= workOrder.quantity) {
+      status = 'DONE';
+    }
+
+    await prisma.workOrder.update({
+      where: {
+        id: workOrderId,
+      },
+      data: {
+        status,
+      },
+    });
+
+    return successResponse(
+      res,
+      {
+        ...data,
+        totalScan,
+        quantity: workOrder.quantity,
+        status,
+      },
+      'Outbound scan success'
+    );
   } catch (error) {
     next(error);
   }
