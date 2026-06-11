@@ -25,7 +25,9 @@ Warehouse Management System — REST API Backend
   - [Storage Bin](#storage-bin)
   - [Supplier](#supplier)
   - [Asset](#asset)
-  - [Asset Movement](#asset-movement)
+  - [Work Order](#work-order)
+  - [Asset Label](#asset-label)
+  - [Report & Analytics](#report--analytics)
 - [Format Response](#format-response)
 - [HTTP Status Code](#http-status-code)
 - [Role & Hak Akses](#role--hak-akses)
@@ -40,8 +42,8 @@ Warehouse Management System — REST API Backend
 
 | Package | Versi | Fungsi |
 |---|---|---|
-| Node.js | 24.x | Runtime |
-| Express | 4.x | HTTP framework |
+| Node.js | 20.x | Runtime |
+| Express | 5.x | HTTP framework |
 | Prisma | v7 | ORM |
 | `@prisma/adapter-pg` | latest | Adapter koneksi PostgreSQL |
 | `pg` | latest | PostgreSQL client pool |
@@ -54,6 +56,8 @@ Warehouse Management System — REST API Backend
 | `cors` | latest | Cross-origin request |
 | `morgan` | latest | HTTP request logger |
 | `dotenv` | latest | Load environment variables |
+| `pdfkit` | latest | Generate PDF label |
+| `qrcode` | latest | Generate QR Code untuk label PDF |
 
 ---
 
@@ -73,7 +77,9 @@ wms-backend/
 │   │   ├── assetController.js
 │   │   ├── supplierController.js
 │   │   ├── storageBinController.js
-│   │   └── assetMovementController.js
+│   │   ├── workOrderController.js
+│   │   ├── assetLabelController.js
+│   │   └── reportController.js
 │   ├── middleware/
 │   │   ├── auth.js            # JWT authenticate + authorize
 │   │   ├── validate.js        # Joi validation middleware
@@ -85,7 +91,9 @@ wms-backend/
 │   │   ├── asset.js
 │   │   ├── supplier.js
 │   │   ├── storageBin.js
-│   │   └── assetMovement.js
+│   │   ├── workOrder.js
+│   │   ├── assetLabelRoutes.js
+│   │   └── reportRoutes.js
 │   ├── validations/
 │   │   ├── authValidation.js
 │   │   ├── userValidation.js
@@ -93,11 +101,11 @@ wms-backend/
 │   │   ├── assetValidation.js
 │   │   ├── supplierValidation.js
 │   │   ├── storageBinValidation.js
-│   │   └── assetMovementValidation.js
+│   │   └── workOrderValidation.js
 │   ├── utils/
 │   │   ├── helpers.js         # generateToken, hashPassword, successResponse, dll
 │   │   ├── prisma.js          # Singleton Prisma client dengan Proxy pattern
-│   │   └── autoNumber.js      # Auto-generate nomor (WH_01, AST_01, dll)
+│   │   └── autoNumber.js      # Auto-generate nomor (WH_01, AST_01, WOI_001, dll)
 │   ├── app.js                 # Express config, middleware, routes
 │   └── server.js              # Entry point, koneksi DB, graceful shutdown
 ├── .env                       # Tidak di-commit ke git
@@ -148,26 +156,13 @@ JWT_SECRET=ganti_dengan_secret_yang_panjang_dan_aman
 JWT_EXPIRES_IN=1d
 ```
 
-**Catatan `JWT_EXPIRES_IN`:**
-
-| Value | Arti | Cocok untuk |
-|---|---|---|
-| `1h` | 1 jam | Aplikasi banking/keuangan |
-| `8h` | 8 jam | Aplikasi kerja (1 shift) |
-| `1d` | 1 hari | Aplikasi umum ✅ (dipakai project ini) |
-| `7d` | 7 hari | Aplikasi dengan "remember me" |
-| `30d` | 30 hari | Aplikasi mobile |
-
-**Catatan `DATABASE_URL`:**  
-Gunakan **Session Pooler** dari Supabase (bukan Direct Connection). Session Pooler kompatibel dengan IPv4 dan mendukung koneksi pooling dari Node.js.
-
 ---
 
 ## Database
 
 Project ini menggunakan **Supabase** (hosted PostgreSQL) dengan **Prisma v7**.
 
-### Prisma v7 — Perubahan Breaking dari v5/v6
+### Prisma v7 — Perbedaan dari v5/v6
 
 Prisma v7 tidak lagi menerima `url` di `schema.prisma`. URL koneksi dikonfigurasi di `prisma.config.ts`.
 
@@ -175,34 +170,9 @@ Prisma v7 tidak lagi menerima `url` di `schema.prisma`. URL koneksi dikonfiguras
 // BENAR di Prisma v7
 datasource db {
   provider = "postgresql"
-}
-
-// SALAH di Prisma v7 (cara lama)
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")  // ← ini akan error
+  // tidak ada url di sini
 }
 ```
-
-### Prisma Client — Singleton dengan Proxy Pattern
-
-`src/utils/prisma.js` menggunakan Proxy untuk memastikan instance Prisma dibuat **setelah** `dotenv` selesai load:
-
-```javascript
-const prismaProxy = new Proxy({}, {
-  get(_, prop) {
-    const client = getPrisma();
-    const value = client[prop];
-    // .bind(client) penting agar $connect/$disconnect tidak kehilangan context this
-    if (typeof value === 'function') {
-      return value.bind(client);
-    }
-    return value;
-  }
-});
-```
-
-Tanpa `.bind(client)`, method seperti `$connect()` dan `$disconnect()` akan error karena `this` tidak merujuk ke instance PrismaClient yang benar.
 
 ### Commands
 
@@ -229,16 +199,14 @@ Health check: `GET http://localhost:3000/health`
 ```json
 {
   "status": "ok",
-  "timestamp": "2026-05-20T05:39:27.177Z",
-  "uptime": 77.71
+  "timestamp": "2026-06-11T01:22:16.951Z",
+  "uptime": 110.27
 }
 ```
 
 ---
 
 ## Deployment (Render)
-
-Project ini di-deploy ke **Render** (free tier).
 
 **Production URL:** https://wms-backend-ef8b.onrender.com
 
@@ -259,13 +227,9 @@ Project ini di-deploy ke **Render** (free tier).
 | `NODE_ENV` | `production` |
 | `JWT_SECRET` | Secret key JWT |
 | `JWT_EXPIRES_IN` | `1d` |
-| `CORS_ORIGIN` | `*` (ganti ke URL frontend setelah frontend di-deploy) |
+| `CORS_ORIGIN` | URL frontend (ganti setelah frontend di-deploy) |
 
-> **Catatan:** `PORT` **tidak perlu** ditambahkan — Render inject otomatis.
-
-### Perilaku Free Tier
-
-Render free tier akan "sleep" setelah 15 menit tidak ada request. Request pertama setelah idle akan memerlukan ~30 detik untuk wake up. Ini normal untuk kebutuhan demo/assessment.
+> **Catatan:** `PORT` tidak perlu ditambahkan — Render inject otomatis.
 
 ### Credentials Admin Production
 
@@ -278,46 +242,22 @@ password : Admin123!
 
 ## API Reference
 
+Semua endpoint (kecuali auth) memerlukan header:
+```
+Authorization: Bearer <token>
+```
+
+---
+
 ### Auth
 
-Tidak memerlukan token kecuali `GET /auth/me`.
-
-| Method | Endpoint | Deskripsi |
-|---|---|---|
-| POST | `/auth/register` | Register user baru |
-| POST | `/auth/login` | Login, dapat JWT token |
-| GET | `/auth/me` | Profil user yang sedang login |
-
-**POST `/auth/register`**
-
-```json
-{
-  "userName": "Admin WMS",
-  "email": "admin@wms.com",
-  "password": "Admin123!",
-  "role": "ADMIN",
-  "telp": "08123456789"
-}
-```
-
-Response `201`:
-```json
-{
-  "success": true,
-  "message": "User registered successfully",
-  "data": {
-    "id": "clxxxxx",
-    "userNumber": "USER_01",
-    "userName": "Admin WMS",
-    "email": "admin@wms.com",
-    "role": "ADMIN",
-    "isActive": true
-  }
-}
-```
+| Method | Endpoint | Role | Deskripsi |
+|---|---|---|---|
+| POST | `/auth/register` | Public | Register user baru |
+| POST | `/auth/login` | Public | Login, dapat JWT token |
+| GET | `/auth/me` | Semua | Profil user yang sedang login |
 
 **POST `/auth/login`**
-
 ```json
 {
   "email": "admin@wms.com",
@@ -329,65 +269,31 @@ Response `200`:
 ```json
 {
   "success": true,
-  "message": "Login successful",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "userNumber": "USER_01",
-      "userName": "Admin WMS",
-      "email": "admin@wms.com",
-      "role": "ADMIN"
-    }
+    "token": "eyJhbGci...",
+    "user": { "userNumber": "USER_01", "userName": "Admin WMS", "role": "ADMIN" }
   }
 }
 ```
 
-Token berlaku **1 hari**. Sertakan di setiap request dengan header:
-```
-Authorization: Bearer <token>
-```
+Token berlaku **1 hari**.
 
 ---
 
 ### User
 
-Semua endpoint wajib login. Password tidak pernah dikembalikan di response.
-
 | Method | Endpoint | Role | Deskripsi |
 |---|---|---|---|
-| GET | `/users` | ADMIN, MANAGER | List semua user dengan pagination & search |
+| GET | `/users` | ADMIN, MANAGER | List semua user |
 | GET | `/users/:id` | ADMIN, MANAGER | Detail user |
 | POST | `/users` | ADMIN | Buat user baru |
-| PUT | `/users/:id` | ADMIN | Update user (tidak bisa ganti email) |
-| PATCH | `/users/:id/change-password` | Semua | Ganti password (verifikasi password lama) |
+| PUT | `/users/:id` | ADMIN | Update user |
+| PATCH | `/users/:id/change-password` | Semua | Ganti password |
 | DELETE | `/users/:id` | ADMIN | Soft delete user |
-
-**GET `/users` — Query Parameters**
-
-| Parameter | Tipe | Keterangan |
-|---|---|---|
-| `page` | number | Halaman (default: 1) |
-| `limit` | number | Per halaman (default: 10) |
-| `search` | string | Cari berdasarkan userName atau email |
-| `role` | string | Filter: ADMIN \| MANAGER \| STAFF |
-
-**POST `/users` — Request Body**
-
-| Field | Tipe | Wajib | Keterangan |
-|---|---|---|---|
-| `userName` | string | Ya | Min 3 karakter |
-| `email` | string | Ya | Email valid dan unik |
-| `password` | string | Ya | Min 8 karakter, 1 huruf besar, 1 angka, 1 karakter spesial (!@#$%^&*) |
-| `role` | string | Tidak | ADMIN \| MANAGER \| STAFF (default: STAFF) |
-| `telp` | string | Tidak | Nomor telepon |
-
-> Tidak bisa menghapus admin terakhir yang aktif di sistem.
 
 ---
 
 ### Warehouse
-
-Soft delete (`isActive = false`). Auto-number format `WH_01`, `WH_02`, dst.
 
 | Method | Endpoint | Role | Deskripsi |
 |---|---|---|---|
@@ -397,19 +303,18 @@ Soft delete (`isActive = false`). Auto-number format `WH_01`, `WH_02`, dst.
 | PUT | `/warehouses/:id` | Semua | Update warehouse |
 | DELETE | `/warehouses/:id` | Semua | Soft delete warehouse |
 
-**POST `/warehouses` — Request Body**
-
-| Field | Tipe | Wajib | Keterangan |
-|---|---|---|---|
-| `whName` | string | Ya | Min 2 karakter |
-| `whLocation` | string | Tidak | Lokasi warehouse |
-| `remarks` | string | Tidak | Catatan tambahan |
+**POST `/warehouses`**
+```json
+{
+  "whName": "Gudang Jogja",
+  "whLocation": "Sleman, Yogyakarta",
+  "remarks": "Gudang utama"
+}
+```
 
 ---
 
 ### Storage Bin
-
-Lokasi penyimpanan di dalam Warehouse. 1 Storage Bin hanya bisa menampung 1 Asset (one-to-one). Auto-number format `WH_01_001`.
 
 | Method | Endpoint | Role | Deskripsi |
 |---|---|---|---|
@@ -421,26 +326,25 @@ Lokasi penyimpanan di dalam Warehouse. 1 Storage Bin hanya bisa menampung 1 Asse
 
 **GET `/storage-bins` — Query Parameters**
 
-| Parameter | Tipe | Keterangan |
-|---|---|---|
-| `page` | number | Halaman (default: 1) |
-| `limit` | number | Per halaman (default: 10) |
-| `search` | string | Cari berdasarkan binAddress atau category |
-| `warehouseId` | string | Filter berdasarkan ID warehouse |
+| Parameter | Keterangan |
+|---|---|
+| `page` | Halaman (default: 1) |
+| `limit` | Per halaman (default: 10) |
+| `search` | Cari berdasarkan binAddress |
+| `warehouseId` | Filter berdasarkan ID warehouse |
 
-**POST `/storage-bins` — Request Body**
-
-| Field | Tipe | Wajib | Keterangan |
-|---|---|---|---|
-| `warehouseId` | string | Ya | ID warehouse tempat storage bin berada |
-| `category` | string | Ya | SMALL_ASSET \| MEDIUM_ASSET \| LARGE_ASSET |
-| `remarks` | string | Tidak | Catatan tambahan |
+**POST `/storage-bins`**
+```json
+{
+  "warehouseId": "clxxxxx",
+  "category": "SMALL_ASSET",
+  "remarks": "Rak kiri bawah"
+}
+```
 
 ---
 
 ### Supplier
-
-Soft delete. Auto-number format `SUP_01`, `SUP_02`, dst.
 
 | Method | Endpoint | Role | Deskripsi |
 |---|---|---|---|
@@ -450,19 +354,9 @@ Soft delete. Auto-number format `SUP_01`, `SUP_02`, dst.
 | PUT | `/suppliers/:id` | Semua | Update supplier |
 | DELETE | `/suppliers/:id` | Semua | Soft delete supplier |
 
-**POST `/suppliers` — Request Body**
-
-| Field | Tipe | Wajib | Keterangan |
-|---|---|---|---|
-| `supName` | string | Ya | Min 2 karakter |
-| `supCategory` | string | Tidak | LOCAL \| IMPORT (default: LOCAL) |
-| `address` | string | Tidak | Alamat supplier |
-
 ---
 
 ### Asset
-
-Soft delete. Auto-number format `AST_01`. Category asset **harus sama** dengan category Storage Bin saat dialokasikan.
 
 | Method | Endpoint | Role | Deskripsi |
 |---|---|---|---|
@@ -472,66 +366,154 @@ Soft delete. Auto-number format `AST_01`. Category asset **harus sama** dengan c
 | PUT | `/assets/:id` | Semua | Update asset |
 | DELETE | `/assets/:id` | Semua | Soft delete asset |
 
-**GET `/assets` — Query Parameters**
+**POST `/assets`**
+```json
+{
+  "assetName": "Nike Running Shoes Black",
+  "category": "SMALL_ASSET",
+  "price": 1200000,
+  "supplierId": "clxxxxx",
+  "storageBinId": "clxxxxx",
+  "remarks": "Produk baru"
+}
+```
 
-| Parameter | Tipe | Keterangan |
-|---|---|---|
-| `page` | number | Halaman (default: 1) |
-| `limit` | number | Per halaman (default: 10) |
-| `search` | string | Cari berdasarkan assetName atau assetNumber |
-| `category` | string | Filter: SMALL_ASSET \| MEDIUM_ASSET \| LARGE_ASSET |
-| `supplierId` | string | Filter berdasarkan ID supplier |
-
-**POST `/assets` — Request Body**
-
-| Field | Tipe | Wajib | Keterangan |
-|---|---|---|---|
-| `assetName` | string | Ya | Min 2 karakter |
-| `category` | string | Ya | SMALL_ASSET \| MEDIUM_ASSET \| LARGE_ASSET |
-| `price` | number | Tidak | Harga asset (default: 0) |
-| `supplierId` | string | Tidak | ID supplier |
-| `storageBinId` | string | Tidak | ID storage bin (category harus sama) |
-| `remarks` | string | Tidak | Catatan tambahan |
-
-**Business Logic:**
-- Category asset harus sama dengan category storage bin saat dialokasikan
-- 1 storage bin hanya bisa menampung 1 asset (one-to-one)
-- Asset yang sudah dialokasikan ke storage bin lain tidak bisa dialokasikan lagi
-- Set `storageBinId: null` untuk melepas alokasi
+> Category asset **harus sama** dengan category storage bin saat dialokasikan.
 
 ---
 
-### Asset Movement
+### Work Order
 
-Mencatat riwayat pergerakan asset. History tidak bisa diedit — prinsip audit trail.
+Work Order adalah dokumen perintah kerja untuk inbound atau outbound asset. Tanpa WO, user tidak bisa scan label.
 
 | Method | Endpoint | Role | Deskripsi |
 |---|---|---|---|
-| GET | `/asset-movements` | ADMIN, MANAGER | List movement dengan pagination |
-| GET | `/asset-movements/:id` | ADMIN, MANAGER | Detail movement |
-| POST | `/asset-movements` | ADMIN, MANAGER | Buat movement baru |
-| DELETE | `/asset-movements/:id` | ADMIN | Hapus movement |
+| GET | `/work-orders` | Semua | List semua WO |
+| GET | `/work-orders/:id` | Semua | Detail WO + labels |
+| POST | `/work-orders` | ADMIN, MANAGER | Buat WO baru |
+| PUT | `/work-orders/:id/status` | Semua | Update status WO manual |
+| POST | `/work-orders/:id/generate-labels` | Semua | Generate labels sejumlah qty WO |
+| GET | `/work-orders/:id/fifo-labels` | Semua | List label FIFO (untuk suggestion outbound) |
 
-**GET `/asset-movements` — Query Parameters**
+**POST `/work-orders`**
+```json
+{
+  "type": "INBOUND",
+  "warehouseId": "clxxxxx",
+  "storageBinId": "clxxxxx",
+  "assetId": "clxxxxx",
+  "quantity": 10,
+  "remarks": "Inbound barang baru datang"
+}
+```
 
-| Parameter | Tipe | Keterangan |
-|---|---|---|
-| `page` | number | Halaman (default: 1) |
-| `limit` | number | Per halaman (default: 10) |
-| `type` | string | Filter: INBOUND \| OUTBOUND \| TRANSFER |
-| `assetId` | string | Filter berdasarkan asset ID |
-| `warehouseId` | string | Filter berdasarkan warehouse ID |
+Response `201`:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "clxxxxx",
+    "woNumber": "WOI_001",
+    "type": "INBOUND",
+    "status": "TODO",
+    "quantity": 10,
+    "warehouse": { "whName": "Gudang Jogja" },
+    "storageBin": { "binAddress": "WH_01_001" },
+    "asset": { "assetName": "Nike Running Shoes Black" }
+  }
+}
+```
 
-**POST `/asset-movements` — Request Body**
+**Business Logic:**
+- Category asset harus sama dengan category storage bin
+- Status WO diupdate otomatis saat scan label:
+  - `TODO` → scan = 0
+  - `ON_PROGRESS` → scan > 0
+  - `DONE` → scan = qty WO
+- 1 label = 1 pcs asset
+- Label code melanjutkan counting dari label sebelumnya (meskipun beda WO, selama asset sama)
+- Generate labels tidak bisa dilakukan dua kali pada WO yang sama
 
-| Field | Tipe | Wajib | Keterangan |
+---
+
+### Asset Label
+
+| Method | Endpoint | Role | Deskripsi |
 |---|---|---|---|
-| `type` | string | Ya | INBOUND \| OUTBOUND \| TRANSFER |
-| `assetId` | string | Ya | ID asset yang bergerak |
-| `warehouseId` | string | Ya | ID warehouse tujuan / asal |
-| `storageBinId` | string | Tidak | ID storage bin |
-| `quantity` | number | Ya | Jumlah (integer >= 0) |
-| `notes` | string | Tidak | Catatan, maks 500 karakter |
+| GET | `/asset-labels` | Semua | List semua label |
+| GET | `/asset-labels/:id` | Semua | Detail label + scan history |
+| POST | `/asset-labels/scan` | Semua | Scan label inbound |
+| POST | `/asset-labels/outbound-scan` | Semua | Scan label outbound (FIFO) |
+| GET | `/asset-labels/print/:workOrderId` | Semua | Download PDF label (Send & Download di Postman) |
+
+**POST `/asset-labels/scan`**
+```json
+{
+  "labelCode": "AST_01_000001"
+}
+```
+
+**POST `/asset-labels/outbound-scan`**
+```json
+{
+  "labelCode": "AST_01_000001"
+}
+```
+
+> Outbound harus urut berdasarkan inbound terlama ke terbaru (FIFO). Jika melanggar urutan, akan return error `FIFO violation. Scan AST_01_000001 first`.
+
+**GET `/asset-labels/print/:workOrderId`**
+
+Mengembalikan file PDF. Di Postman gunakan **Send and Download** untuk menyimpan file-nya.
+
+Layout PDF: A4, 2 kolom × 5 baris = 10 label per halaman. Setiap label berisi: asset number, asset name, harga, QR Code, label code, supplier.
+
+---
+
+### Report & Analytics
+
+| Method | Endpoint | Role | Deskripsi |
+|---|---|---|---|
+| GET | `/reports/inbound` | Semua | Log semua transaksi inbound |
+| GET | `/reports/outbound` | Semua | Log semua transaksi outbound |
+| GET | `/reports/stock` | Semua | Stock semua asset saat ini |
+| GET | `/reports/analytics` | Semua | Summary total stock + per category |
+
+**GET `/reports/analytics`**
+
+Query params opsional:
+
+| Parameter | Keterangan |
+|---|---|
+| `warehouseId` | Filter asset berdasarkan warehouse |
+| `storageBinId` | Filter asset berdasarkan storage bin tertentu |
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "totalAsset": 5,
+    "totalStock": 120,
+    "perCategory": [
+      { "category": "SMALL_ASSET", "totalStock": 50, "totalAsset": 2 },
+      { "category": "MEDIUM_ASSET", "totalStock": 30, "totalAsset": 1 },
+      { "category": "LARGE_ASSET", "totalStock": 40, "totalAsset": 2 }
+    ],
+    "detail": [
+      {
+        "assetNumber": "AST_01",
+        "assetName": "Nike Running Shoes Black",
+        "category": "SMALL_ASSET",
+        "stock": 50,
+        "storageBin": "WH_01_001",
+        "warehouseName": "Gudang Jogja",
+        "supplierName": "Supplier XYZ"
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -567,7 +549,7 @@ Mencatat riwayat pergerakan asset. History tidak bisa diedit — prinsip audit t
   "success": false,
   "message": "Validation failed",
   "errors": [
-    { "field": "email", "message": "Email must be a valid email address" }
+    { "field": "type", "message": "Type must be INBOUND or OUTBOUND" }
   ]
 }
 ```
@@ -581,10 +563,10 @@ Mencatat riwayat pergerakan asset. History tidak bisa diedit — prinsip audit t
 | 200 | OK | Request berhasil (GET, PUT, PATCH) |
 | 201 | Created | Data berhasil dibuat (POST) |
 | 400 | Bad Request | Request tidak valid / field salah |
-| 401 | Unauthorized | Token tidak ada, tidak valid, atau sudah expired |
+| 401 | Unauthorized | Token tidak ada, tidak valid, atau expired |
 | 403 | Forbidden | Token valid tapi role tidak punya akses |
 | 404 | Not Found | Data atau route tidak ditemukan |
-| 409 | Conflict | Data duplikat (email sudah terdaftar, dll) |
+| 409 | Conflict | Data duplikat |
 | 422 | Unprocessable Entity | Validasi input gagal (Joi) |
 | 429 | Too Many Requests | Kena rate limit |
 | 500 | Internal Server Error | Error tidak terduga di server |
@@ -595,9 +577,9 @@ Mencatat riwayat pergerakan asset. History tidak bisa diedit — prinsip audit t
 
 | Role | Keterangan |
 |---|---|
-| `ADMIN` | Akses penuh ke semua endpoint termasuk user management |
+| `ADMIN` | Akses penuh ke semua endpoint |
 | `MANAGER` | Akses read + create + update, tidak bisa delete user |
-| `STAFF` | Akses terbatas, bisa ganti password sendiri |
+| `STAFF` | Akses terbatas, bisa scan label dan ganti password sendiri |
 
 ---
 
@@ -608,13 +590,14 @@ Mencatat riwayat pergerakan asset. History tidak bisa diedit — prinsip audit t
 | `Role` | `ADMIN` \| `MANAGER` \| `STAFF` | User, Auth register |
 | `AssetCategory` | `SMALL_ASSET` \| `MEDIUM_ASSET` \| `LARGE_ASSET` | Asset, StorageBin |
 | `SupplierCategory` | `LOCAL` \| `IMPORT` | Supplier |
-| `MovementType` | `INBOUND` \| `OUTBOUND` \| `TRANSFER` | AssetMovement |
+| `WorkOrderType` | `INBOUND` \| `OUTBOUND` | WorkOrder |
+| `WorkOrderStatus` | `TODO` \| `ON_PROGRESS` \| `DONE` | WorkOrder |
 
 ---
 
 ## Auto-Number Format
 
-Nomor di-generate otomatis oleh server, tidak perlu dikirim dari client.
+Nomor di-generate otomatis oleh server.
 
 | Resource | Contoh | Format |
 |---|---|---|
@@ -623,6 +606,9 @@ Nomor di-generate otomatis oleh server, tidak perlu dikirim dari client.
 | Asset | `AST_01` | Prefix `AST_` + 2 digit angka |
 | Supplier | `SUP_01` | Prefix `SUP_` + 2 digit angka |
 | User | `USER_01` | Prefix `USER_` + 2 digit angka |
+| Work Order (Inbound) | `WOI_001` | Prefix `WOI_` + 3 digit angka |
+| Work Order (Outbound) | `WOO_001` | Prefix `WOO_` + 3 digit angka |
+| Label Code | `AST_01_000001` | Asset number + 6 digit urutan per asset |
 
 ---
 
@@ -633,37 +619,32 @@ Nomor di-generate otomatis oleh server, tidak perlu dikirim dari client.
 | Global (semua endpoint) | 100 request per IP | 15 menit |
 | Auth (`/auth/login`, `/auth/register`) | 10 request per IP | 15 menit |
 
-Jika melebihi batas, server akan return status `429` dengan pesan:
-```json
-{
-  "success": false,
-  "message": "Too many requests, please try again after 15 minutes."
-}
-```
-
 ---
 
 ## Arsitektur & Keputusan Teknis
 
-### Adapter pg vs Adapter Neon
+### Work Order Flow
 
-Project ini menggunakan `@prisma/adapter-pg` + `pg`, bukan `@prisma/adapter-neon`. Alasannya:
+```
+Buat WO → Generate Labels → Scan Label (per pcs) → Status DONE
+              ↓
+         Label Code: AST_01_000001, AST_01_000002, ...
+              ↓
+         Scan Inbound → stock +1 per scan
+         Scan Outbound → FIFO check → stock -1 per scan
+```
 
-- Adapter Neon menggunakan WebSocket yang bisa bermasalah di environment production (Render)
-- Adapter `pg` lebih stabil untuk project CommonJS
-- Adapter `pg` tidak bergantung pada cara `dotenv` di-load
+### FIFO Enforcement
+
+Outbound scan harus urut dari label yang paling lama masuk (inboundAt terlama). Jika melanggar urutan, sistem akan menolak dan memberikan info label mana yang harus discan lebih dulu.
 
 ### Proxy Pattern pada Prisma Client
 
-`src/utils/prisma.js` menggunakan [Proxy pattern](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy) agar `PrismaClient` dibuat **lazy** — hanya dibuat saat pertama kali diakses, bukan saat module di-require. Ini memastikan `process.env.DATABASE_URL` sudah ter-load oleh `dotenv` sebelum koneksi dibuat.
+`src/utils/prisma.js` menggunakan Proxy agar PrismaClient dibuat lazy — hanya dibuat saat pertama kali diakses, memastikan `process.env.DATABASE_URL` sudah ter-load sebelum koneksi dibuat.
 
 ### Soft Delete
 
 Warehouse, Asset, dan Supplier menggunakan soft delete (`isActive = false`) agar data historis tetap tersimpan. StorageBin menggunakan hard delete tapi hanya bisa dihapus jika tidak ada asset di dalamnya.
-
-### Satu Instance Prisma
-
-`server.js` tidak membuat instance Prisma sendiri. Semua koneksi database menggunakan satu instance dari `src/utils/prisma.js`. Ini mencegah resource leak dan konflik koneksi.
 
 ---
 
@@ -678,14 +659,12 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Otomatis pasang token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Handle token expired
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -702,4 +681,4 @@ export default api;
 
 ---
 
-*WMS Backend — v1.1 | 20 Mei 2026*
+*WMS Backend — v2.0 | 11 Juni 2026 | Skill Test 2 Complete*
