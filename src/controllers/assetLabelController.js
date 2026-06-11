@@ -89,6 +89,12 @@ const scanLabel = async (req, res, next) => {
       },
     });
 
+    // Update inboundAt saat scan (akurat untuk FIFO)
+    await prisma.assetLabel.update({
+      where: { id: label.id },
+      data: { inboundAt: new Date() },
+    });
+
     // Increment stock asset
     await prisma.asset.update({
       where: { id: label.assetId },
