@@ -149,10 +149,23 @@ const outboundScan = async (req, res, next) => {
 
     const label = await prisma.assetLabel.findFirst({
       where: { labelCode },
+      include: {
+        asset: true,
+      },
     });
 
     if (!label) {
       throw createError('Label not found', 404);
+    }
+
+    // Validasi asset sesuai WO
+    if (label.assetId !== workOrder.assetId) {
+      throw createError('Asset does not match Work Order', 400);
+    }
+
+    // Validasi storage bin sesuai WO
+    if (label.asset.storageBinId !== workOrder.storageBinId) {
+      throw createError('Storage Bin does not match Work Order', 400);
     }
 
     if (label.isOutbound) {
@@ -162,7 +175,7 @@ const outboundScan = async (req, res, next) => {
     // FIFO Check
     const fifoLabel = await prisma.assetLabel.findFirst({
       where: {
-        assetId: label.assetId,
+        assetId: workOrder.assetId,
         isOutbound: false,
       },
       orderBy: {
@@ -260,6 +273,7 @@ const outboundScan = async (req, res, next) => {
     next(error);
   }
 };
+
 
 const printLabels = async (req, res, next) => {
   try {

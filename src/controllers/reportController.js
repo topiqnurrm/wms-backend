@@ -4,7 +4,14 @@ const { successResponse } = require('../utils/helpers');
 const getInboundReport = async (req, res, next) => {
   try {
     const scans = await prisma.labelScan.findMany({
-      orderBy: { scannedAt: 'desc' },
+      where: {
+        workOrder: {
+          type: 'INBOUND',
+        },
+      },
+      orderBy: {
+        scannedAt: 'desc',
+      },
       include: {
         workOrder: {
           include: {
@@ -13,12 +20,16 @@ const getInboundReport = async (req, res, next) => {
           },
         },
         scannedBy: {
-          select: { userName: true },
+          select: {
+            userName: true,
+          },
         },
         label: {
           include: {
             asset: {
-              include: { supplier: true },
+              include: {
+                supplier: true,
+              },
             },
           },
         },
@@ -36,10 +47,13 @@ const getInboundReport = async (req, res, next) => {
       labelCode: item.label.labelCode,
       scannedAt: item.scannedAt,
       scannedBy: item.scannedBy.userName,
-      updatedStock: item.label.asset.quantity,
     }));
 
-    return successResponse(res, data, 'Inbound report fetched successfully');
+    return successResponse(
+      res,
+      data,
+      'Inbound report fetched successfully'
+    );
   } catch (error) {
     next(error);
   }
@@ -57,6 +71,11 @@ const getOutboundReport = async (req, res, next) => {
         scannedAt: 'desc',
       },
       include: {
+        scannedBy: {
+          select: {
+            userName: true,
+          },
+        },
         label: {
           include: {
             asset: {
@@ -84,7 +103,9 @@ const getOutboundReport = async (req, res, next) => {
       supplierName:
         item.label.asset.supplier?.supName || null,
       remarks: item.workOrder.remarks,
+
       labelCode: item.label.labelCode,
+      scannedBy: item.scannedBy.userName,
       outboundAt: item.scannedAt,
     }));
 
