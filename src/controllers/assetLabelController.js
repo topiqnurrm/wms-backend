@@ -16,11 +16,7 @@ const getAll = async (req, res, next) => {
       },
     });
 
-    return successResponse(
-      res,
-      data,
-      'Asset labels fetched successfully'
-    );
+    return successResponse(res, data, 'Asset labels fetched successfully');
   } catch (error) {
     next(error);
   }
@@ -43,11 +39,7 @@ const getById = async (req, res, next) => {
       throw createError('Asset label not found', 404);
     }
 
-    return successResponse(
-      res,
-      data,
-      'Asset label fetched successfully'
-    );
+    return successResponse(res, data, 'Asset label fetched successfully');
   } catch (error) {
     next(error);
   }
@@ -58,115 +50,74 @@ const scanLabel = async (req, res, next) => {
     const { labelCode } = req.body;
 
     const label = await prisma.assetLabel.findFirst({
-      where: {
-        labelCode,
-      },
-      include: {
-        workOrder: true,
-      },
+      where: { labelCode },
+      include: { workOrder: true },
     });
 
     if (!label) {
-      throw createError(
-        'Label not found',
-        404
-      );
+      throw createError('Label not found', 404);
     }
 
     // Cek duplicate scan
-    const existingScan =
-      await prisma.labelScan.findFirst({
-        where: {
-          labelId: label.id,
-          workOrderId: label.workOrderId,
-        },
-      });
+    const existingScan = await prisma.labelScan.findFirst({
+      where: {
+        labelId: label.id,
+        workOrderId: label.workOrderId,
+      },
+    });
 
     if (existingScan) {
-      throw createError(
-        'Label already scanned',
-        400
-      );
+      throw createError('Label already scanned', 400);
     }
 
     // Cek qty WO
-    const scanCount =
-      await prisma.labelScan.count({
-        where: {
-          workOrderId: label.workOrderId,
-        },
-      });
+    const scanCount = await prisma.labelScan.count({
+      where: { workOrderId: label.workOrderId },
+    });
 
-    if (
-      scanCount >=
-      label.workOrder.quantity
-    ) {
-      throw createError(
-        'WO quantity reached',
-        400
-      );
+    if (scanCount >= label.workOrder.quantity) {
+      throw createError('WO quantity reached', 400);
     }
 
-   
+    // Buat scan record
+    // FIX: field adalah scannedById, bukan scannedBy
     await prisma.labelScan.create({
       data: {
         labelId: label.id,
         workOrderId: label.workOrderId,
-        scannedBy: req.user.id,
+        scannedById: req.user.id,
       },
     });
 
-    
+    // Increment stock asset
     await prisma.asset.update({
-      where: {
-        id: label.assetId,
-      },
-      data: {
-        quantity: {
-          increment: 1,
-        },
-      },
+      where: { id: label.assetId },
+      data: { quantity: { increment: 1 } },
     });
 
-    
-    const totalScan =
-      await prisma.labelScan.count({
-        where: {
-          workOrderId: label.workOrderId,
-        },
-      });
+    // Hitung total scan terbaru
+    const totalScan = await prisma.labelScan.count({
+      where: { workOrderId: label.workOrderId },
+    });
 
+    // FIX: gunakan ON_PROGRESS sesuai enum di schema.prisma (bukan IN_PROGRESS)
     let status = 'TODO';
-
     if (totalScan > 0) {
-      status = 'IN_PROGRESS';
+      status = 'ON_PROGRESS';
     }
-
-    if (
-      totalScan >=
-      label.workOrder.quantity
-    ) {
+    if (totalScan >= label.workOrder.quantity) {
       status = 'DONE';
     }
 
     // Update status WO
     await prisma.workOrder.update({
-      where: {
-        id: label.workOrderId,
-      },
-      data: {
-        status,
-      },
+      where: { id: label.workOrderId },
+      data: { status },
     });
 
     return successResponse(
       res,
-      {
-        totalScan,
-        quantity:
-          label.workOrder.quantity,
-        status,
-      },
+      { totalScan, quantity: label.workOrder.quantity, status },
       'Label scanned successfully'
     );
   } catch (error) {
@@ -179,77 +130,49 @@ const outboundScan = async (req, res, next) => {
     const { labelCode } = req.body;
 
     const label = await prisma.assetLabel.findFirst({
-      where: {
-        labelCode,
-      },
+      where: { labelCode },
     });
 
     if (!label) {
-      throw createError(
-        'Label not found',
-        404
-      );
+      throw createError('Label not found', 404);
     }
 
-  
     if (label.isOutbound) {
-      throw createError(
-        'Label already outbound',
-        400
-      );
+      throw createError('Label already outbound', 400);
     }
 
-    // FIFO Check
-    const fifoLabel =
-      await prisma.assetLabel.findFirst({
-        where: {
-          assetId: label.assetId,
-          isOutbound: false,
-        },
-        orderBy: {
-          inboundAt: 'asc',
-        },
-      });
+    // FIFO Check — harus scan label inbound terlama dulu
+    const fifoLabel = await prisma.assetLabel.findFirst({
+      where: {
+        assetId: label.assetId,
+        isOutbound: false,
+      },
+      orderBy: { inboundAt: 'asc' },
+    });
 
-    if (
-      fifoLabel &&
-      fifoLabel.id !== label.id
-    ) {
+    if (fifoLabel && fifoLabel.id !== label.id) {
       throw createError(
         `FIFO violation. Scan ${fifoLabel.labelCode} first`,
         400
       );
     }
 
-    // Update label outbound
-    const data =
-      await prisma.assetLabel.update({
-        where: {
-          id: label.id,
-        },
-        data: {
-          isOutbound: true,
-          outboundAt: new Date(),
-        },
-      });
-
-    // Kurangi stock asset
-    await prisma.asset.update({
-      where: {
-        id: label.assetId,
-      },
+    // Update label jadi outbound
+    const data = await prisma.assetLabel.update({
+      where: { id: label.id },
       data: {
-        quantity: {
-          decrement: 1,
-        },
+        isOutbound: true,
+        outboundAt: new Date(),
       },
     });
 
-    return successResponse(
-      res,
-      data,
-      'Outbound scan success'
-    );
+    // Kurangi stock asset
+    await prisma.asset.update({
+      where: { id: label.assetId },
+      data: { quantity: { decrement: 1 } },
+    });
+
+    return successResponse(res, data, 'Outbound scan success');
   } catch (error) {
     next(error);
   }
@@ -260,232 +183,110 @@ const printLabels = async (req, res, next) => {
     const { workOrderId } = req.params;
 
     const labels = await prisma.assetLabel.findMany({
-      where: {
-        workOrderId,
-      },
+      where: { workOrderId },
       include: {
         asset: {
-          include: {
-            supplier: true,
-          },
+          include: { supplier: true },
         },
       },
-      orderBy: {
-        createdAt: 'asc',
-      },
+      orderBy: { createdAt: 'asc' },
     });
 
     if (!labels.length) {
       throw createError('Labels not found', 404);
     }
 
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 0,
-    });
+    const doc = new PDFDocument({ size: 'A4', margin: 0 });
 
-    res.setHeader(
-      'Content-Type',
-      'application/pdf'
-    );
-
-    res.setHeader(
-      'Content-Disposition',
-      'inline; filename=labels.pdf'
-    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename=labels.pdf');
 
     doc.pipe(res);
 
     const cm = (n) => n * 28.35;
 
-    // A4
     const pageWidth = cm(21);
     const pageHeight = cm(29.7);
-
     const marginLeft = cm(2);
     const marginRight = cm(2);
     const marginTop = cm(2.7);
     const marginBottom = cm(3);
-
     const gapX = cm(1);
     const gapY = cm(1);
-
     const cols = 2;
     const rows = 5;
 
-    const labelWidth =
-      (pageWidth -
-        marginLeft -
-        marginRight -
-        gapX) / cols;
-
+    const labelWidth = (pageWidth - marginLeft - marginRight - gapX) / cols;
     const labelHeight =
-      (pageHeight -
-        marginTop -
-        marginBottom -
-        gapY * (rows - 1)) / rows;
-
+      (pageHeight - marginTop - marginBottom - gapY * (rows - 1)) / rows;
     const labelsPerPage = cols * rows;
 
     for (let i = 0; i < labels.length; i++) {
       const label = labels[i];
-
-      const pageIndex =
-        i % labelsPerPage;
+      const pageIndex = i % labelsPerPage;
 
       if (i > 0 && pageIndex === 0) {
         doc.addPage();
       }
 
-      const row = Math.floor(
-        pageIndex / cols
-      );
+      const row = Math.floor(pageIndex / cols);
+      const col = pageIndex % cols;
+      const x = marginLeft + col * (labelWidth + gapX);
+      const y = marginTop + row * (labelHeight + gapY);
 
-      const col =
-        pageIndex % cols;
+      doc.rect(x, y, labelWidth, labelHeight).lineWidth(0.8).stroke();
 
-      const x =
-        marginLeft +
-        col * (labelWidth + gapX);
+      doc.font('Helvetica').fontSize(6).text(label.asset.assetNumber, x + 8, y + 6);
 
-      const y =
-        marginTop +
-        row * (labelHeight + gapY);
-
-      // Border Label
-      doc
-        .rect(
-          x,
-          y,
-          labelWidth,
-          labelHeight
-        )
-        .lineWidth(0.8)
-        .stroke();
-
-      // Asset Number
-      doc
-        .font('Helvetica')
-        .fontSize(6)
-        .text(
-          label.asset.assetNumber,
-          x + 8,
-          y + 6
-        );
-
-      // Asset Name
       doc
         .font('Helvetica-Bold')
         .fontSize(10)
-        .text(
-          label.asset.assetName,
-          x + 8,
-          y + 18,
-          {
-            width: labelWidth - 90,
-            height: 28,
-          }
-        );
+        .text(label.asset.assetName, x + 8, y + 18, {
+          width: labelWidth - 90,
+          height: 28,
+        });
 
-      // Price
       doc
         .font('Helvetica')
         .fontSize(6)
         .text(
-          `Rp.${Number(
-            label.asset.price
-          ).toLocaleString('id-ID')}`,
+          `Rp.${Number(label.asset.price).toLocaleString('id-ID')}`,
           x + 8,
           y + 80
         );
 
-      // QR Position
       const qrSize = cm(2.5);
-
-      const qrX =
-        x +
-        labelWidth -
-        qrSize -
-        10;
-
+      const qrX = x + labelWidth - qrSize - 10;
       const qrY = y + 18;
 
-      // Label Code
       doc
         .font('Helvetica')
         .fontSize(4)
-        .text(
-          label.labelCode,
-          qrX - 10,
-          y + 5,
-          {
-            width: qrSize + 20,
-            align: 'center',
-          }
-        );
+        .text(label.labelCode, qrX - 10, y + 5, {
+          width: qrSize + 20,
+          align: 'center',
+        });
 
-      // QR Generate
-      const qr =
-        await QRCode.toDataURL(
-          label.labelCode
-        );
-
+      const qr = await QRCode.toDataURL(label.labelCode);
       const buffer = Buffer.from(
-        qr.replace(
-          /^data:image\/png;base64,/,
-          ''
-        ),
+        qr.replace(/^data:image\/png;base64,/, ''),
         'base64'
       );
 
-      // QR Border
-      doc
-        .rect(
-          qrX - 2,
-          qrY - 2,
-          qrSize + 4,
-          qrSize + 4
-        )
-        .stroke();
+      doc.rect(qrX - 2, qrY - 2, qrSize + 4, qrSize + 4).stroke();
+      doc.image(buffer, qrX, qrY, { width: qrSize, height: qrSize });
 
-      // QR Image
-      doc.image(
-        buffer,
-        qrX,
-        qrY,
-        {
-          width: qrSize,
-          height: qrSize,
-        }
-      );
+      const footerY = y + labelHeight - 12;
 
-      // Footer kiri
-      const footerY =
-        y + labelHeight - 12;
+      doc.font('Helvetica').fontSize(6).text('WMS Solution', x + 8, footerY);
 
       doc
         .font('Helvetica')
         .fontSize(6)
-        .text(
-          'WMS Solution',
-          x + 8,
-          footerY
-        );
-
-      // Supplier tepat di bawah QR
-      doc
-        .font('Helvetica')
-        .fontSize(6)
-        .text(
-          label.asset.supplier?.supName ||
-            '-',
-          qrX - 15,
-          footerY,
-          {
-            width: qrSize + 30,
-            align: 'center',
-          }
-        );
+        .text(label.asset.supplier?.supName || '-', qrX - 15, footerY, {
+          width: qrSize + 30,
+          align: 'center',
+        });
     }
 
     doc.end();
